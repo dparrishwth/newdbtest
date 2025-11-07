@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NY Personal Income Tax Dashboard</title>
+    <!-- Vercel deployment: drop this file and data.csv into the same directory, deploy as a static site with no build command and output directory set to / -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  </head>
+  <body class="bg-slate-100 text-slate-900">
+    <header
+      class="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200"
+    >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-900">
+              New York Personal Income Tax Dashboard
+            </h1>
+            <p class="text-sm text-slate-600">
+              Explore county and income range dynamics for NYS Personal Income Tax filings.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2 text-xs">
+            <span class="px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">One-page</span>
+            <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700">Mobile-responsive</span>
+            <span class="px-3 py-1 rounded-full bg-sky-100 text-sky-700">Vercel-ready</span>
+          </div>
+        </div>
+      </div>
+    </header>
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <section
+        class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6"
+      >
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Filters</h2>
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" id="filterRow">
+          <label class="flex flex-col text-sm font-medium text-slate-700 gap-2">
+            <span>Tax Year</span>
+            <select
+              id="filterYear"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base focus:border-indigo-500 focus:ring-indigo-500"
+            ></select>
+          </label>
+          <label class="flex flex-col text-sm font-medium text-slate-700 gap-2">
+            <span>County</span>
+            <select
+              id="filterCounty"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base focus:border-indigo-500 focus:ring-indigo-500"
+            ></select>
+          </label>
+          <label class="flex flex-col text-sm font-medium text-slate-700 gap-2">
+            <span>Income Range</span>
+            <select
+              id="filterIncome"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base focus:border-indigo-500 focus:ring-indigo-500"
+            ></select>
+          </label>
+          <label class="flex flex-col text-sm font-medium text-slate-700 gap-2">
+            <span>Residency</span>
+            <select
+              id="filterResidency"
+              class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base focus:border-indigo-500 focus:ring-indigo-500"
+            ></select>
+          </label>
+        </div>
+      </section>
+
+      <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" id="kpiTiles">
+        <!-- KPI Tiles populated via JS -->
+      </section>
+
+      <section class="grid gap-6 lg:grid-cols-2">
+        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">NY AGI vs Tax Liability Trend</h3>
+              <p class="text-sm text-slate-500">
+                Multi-year view of Adjusted Gross Income and Tax Liability for the selected geography and residency.
+              </p>
+            </div>
+          </div>
+          <div id="trendChart" class="w-full h-72 mt-4"></div>
+        </article>
+        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">Filing Status Mix</h3>
+              <p class="text-sm text-slate-500">
+                Distribution of filings by status for the current filters and year.
+              </p>
+            </div>
+          </div>
+          <div id="filingStatusChart" class="w-full h-72 mt-4"></div>
+        </article>
+      </section>
+
+      <section class="grid gap-6 lg:grid-cols-2">
+        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">Income Sources</h3>
+              <p class="text-sm text-slate-500">
+                Net contributions from major income categories for the selected filters.
+              </p>
+            </div>
+          </div>
+          <div id="incomeSourcesChart" class="w-full h-72 mt-4"></div>
+        </article>
+        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">Deductions & Credits</h3>
+              <p class="text-sm text-slate-500">
+                Comparing deductions, credits, and resulting tax liability.
+              </p>
+            </div>
+          </div>
+          <div id="deductionsChart" class="w-full h-72 mt-4"></div>
+        </article>
+      </section>
+
+      <section>
+        <article class="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h3 class="text-lg font-semibold text-slate-800">Top Counties by NY AGI</h3>
+              <p class="text-sm text-slate-500">
+                Highest counties by New York State Adjusted Gross Income for the selected year.
+              </p>
+            </div>
+          </div>
+          <div id="topCountiesChart" class="w-full h-96 mt-4"></div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      /* CONFIG */
+      const CONFIG = {
+        csvPath: 'data.csv',
+        columns: {
+          taxYear: 'Tax Year',
+          residency: 'NYS Residency Status',
+          county: 'County',
+          incomeRange: 'NY Adjusted Gross Income Range (Fed.Col)',
+          returns: 'Number of Returns',
+          single: 'Number filing Single',
+          marriedJoint: 'Number filing Married Joint',
+          head: 'Number filing Head of Household',
+          other: 'Number filing Married Separate or Widow/Widower',
+          federalNYAGI: 'Federal Amount of NY Adjusted Gross Income',
+          stateNYAGI: 'New York State Amount of NY Adjusted Gross Income',
+          taxableIncome: 'Taxable Income',
+          taxBeforeCredits: 'Tax Before Credits',
+          taxCredits: 'Tax Credits',
+          taxLiability: 'Tax Liability',
+          wageReturns: 'Number with Wage and Salary Income',
+          wages: 'Wage and Salary Income',
+          interest: 'Interest',
+          dividends: 'Dividends',
+          gainCapital: 'Gain from Capital & Supplemental Income',
+          lossCapital: 'Loss from Capital & Supplemental Income',
+          gainBusiness: 'Gain from Business & Farm Income',
+          lossBusiness: 'Loss from Business & Farm Income',
+          gainRent: 'Gain from Rent,Royalties,Prtnrshp,Estates,Trusts Income',
+          lossRent: 'Loss from Rent,Royalties,Prtnrshp,Estates,Trusts Income',
+          stdDeductionCount: 'Number with New York Standard Deductions Claimed',
+          stdDeduction: 'New York Standard Deductions Claimed',
+          itemizedCount: 'Number with New York Itemized Deductions Claimed',
+          itemizedDeduction: 'New York Itemized Deductions Claimed',
+        },
+      };
+
+      const state = {
+        rawData: [],
+        filteredData: [],
+        filters: {
+          year: null,
+          county: 'All Counties',
+          income: 'All Income Ranges',
+          residency: 'All Residency',
+        },
+      };
+
+      const formatters = {
+        number(value) {
+          return Number.isFinite(value)
+            ? value.toLocaleString('en-US')
+            : '0';
+        },
+        currency(value) {
+          if (!Number.isFinite(value)) return '$0';
+          return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+        },
+        currencyWithCents(value) {
+          if (!Number.isFinite(value)) return '$0.00';
+          return `$${value.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+        },
+        currencyWithOneDecimal(value) {
+          if (!Number.isFinite(value)) return '$0.0';
+          return `$${value.toLocaleString('en-US', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })}`;
+        },
+        percentage(value) {
+          if (!Number.isFinite(value)) return '0%';
+          return `${value.toLocaleString('en-US', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })}%`;
+        },
+      };
+
+      function parseNumber(value) {
+        if (value === null || value === undefined) return 0;
+        const cleaned = String(value)
+          .replace(/[$,]/g, '')
+          .replace(/\((.*)\)/, '-$1')
+          .trim();
+        const num = parseFloat(cleaned);
+        return Number.isNaN(num) ? 0 : num;
+      }
+
+      function normalizeRow(row) {
+        const cols = CONFIG.columns;
+        return {
+          year: parseNumber(row[cols.taxYear]),
+          residency: row[cols.residency] || 'Unknown',
+          county: row[cols.county] || 'Unknown',
+          incomeRange: row[cols.incomeRange] || 'Unknown',
+          returns: parseNumber(row[cols.returns]),
+          single: parseNumber(row[cols.single]),
+          marriedJoint: parseNumber(row[cols.marriedJoint]),
+          head: parseNumber(row[cols.head]),
+          other: parseNumber(row[cols.other]),
+          stateNYAGI: parseNumber(row[cols.stateNYAGI]),
+          taxableIncome: parseNumber(row[cols.taxableIncome]),
+          taxBeforeCredits: parseNumber(row[cols.taxBeforeCredits]),
+          taxCredits: parseNumber(row[cols.taxCredits]),
+          taxLiability: parseNumber(row[cols.taxLiability]),
+          wages: parseNumber(row[cols.wages]),
+          interest: parseNumber(row[cols.interest]),
+          dividends: parseNumber(row[cols.dividends]),
+          gainCapital: parseNumber(row[cols.gainCapital]),
+          lossCapital: parseNumber(row[cols.lossCapital]),
+          gainBusiness: parseNumber(row[cols.gainBusiness]),
+          lossBusiness: parseNumber(row[cols.lossBusiness]),
+          gainRent: parseNumber(row[cols.gainRent]),
+          lossRent: parseNumber(row[cols.lossRent]),
+          stdDeduction: parseNumber(row[cols.stdDeduction]),
+          itemizedDeduction: parseNumber(row[cols.itemizedDeduction]),
+        };
+      }
+
+      function loadData() {
+        Papa.parse(CONFIG.csvPath, {
+          header: true,
+          download: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            state.rawData = results.data.map(normalizeRow).filter((row) => row.year);
+            initializeFilters();
+            updateAll();
+          },
+          error: (err) => {
+            console.error('Error loading CSV:', err);
+          },
+        });
+      }
+
+      function getUniqueValues(field) {
+        return [...new Set(state.rawData.map((row) => row[field]).filter(Boolean))].sort(
+          (a, b) => {
+            if (typeof a === 'number' && typeof b === 'number') {
+              return b - a;
+            }
+            return a.localeCompare(b);
+          }
+        );
+      }
+
+      function initializeFilters() {
+        const yearOptions = getUniqueValues('year');
+        const countyOptions = getUniqueValues('county');
+        const incomeOptions = getUniqueValues('incomeRange');
+        const residencyOptions = getUniqueValues('residency');
+
+        state.filters.year = yearOptions[0];
+
+        populateSelect(
+          document.getElementById('filterYear'),
+          yearOptions.map((year) => ({ label: year, value: year })),
+          state.filters.year
+        );
+
+        populateSelect(
+          document.getElementById('filterCounty'),
+          [{ label: 'All Counties', value: 'All Counties' }].concat(
+            countyOptions.map((county) => ({ label: county, value: county }))
+          ),
+          state.filters.county
+        );
+
+        populateSelect(
+          document.getElementById('filterIncome'),
+          [{ label: 'All Income Ranges', value: 'All Income Ranges' }].concat(
+            incomeOptions.map((income) => ({ label: income, value: income }))
+          ),
+          state.filters.income
+        );
+
+        populateSelect(
+          document.getElementById('filterResidency'),
+          [{ label: 'All Residency', value: 'All Residency' }].concat(
+            residencyOptions.map((residency) => ({ label: residency, value: residency }))
+          ),
+          state.filters.residency
+        );
+
+        wireFilters();
+      }
+
+      function populateSelect(selectEl, options, selectedValue) {
+        selectEl.innerHTML = '';
+        options.forEach((option) => {
+          const opt = document.createElement('option');
+          opt.value = option.value;
+          opt.textContent = option.label;
+          if (option.value === selectedValue) {
+            opt.selected = true;
+          }
+          selectEl.appendChild(opt);
+        });
+      }
+
+      /* EVENT WIRING */
+      function wireFilters() {
+        document.getElementById('filterYear').addEventListener('change', (event) => {
+          state.filters.year = Number(event.target.value);
+          updateAll();
+        });
+
+        document.getElementById('filterCounty').addEventListener('change', (event) => {
+          state.filters.county = event.target.value;
+          updateAll();
+        });
+
+        document.getElementById('filterIncome').addEventListener('change', (event) => {
+          state.filters.income = event.target.value;
+          updateAll();
+        });
+
+        document.getElementById('filterResidency').addEventListener('change', (event) => {
+          state.filters.residency = event.target.value;
+          updateAll();
+        });
+      }
+
+      function applyFilters({ includeIncomeRange = true } = {}) {
+        const { year, county, income, residency } = state.filters;
+        return state.rawData.filter((row) => {
+          const matchYear = row.year === year;
+          const matchCounty = county === 'All Counties' || row.county === county;
+          const matchIncome =
+            !includeIncomeRange || income === 'All Income Ranges' || row.incomeRange === income;
+          const matchResidency =
+            residency === 'All Residency' || row.residency === residency;
+          return matchYear && matchCounty && matchIncome && matchResidency;
+        });
+      }
+
+      function aggregateRows(rows) {
+        return rows.reduce(
+          (acc, row) => {
+            acc.returns += row.returns;
+            acc.stateNYAGI += row.stateNYAGI;
+            acc.taxableIncome += row.taxableIncome;
+            acc.taxLiability += row.taxLiability;
+            acc.taxBeforeCredits += row.taxBeforeCredits;
+            acc.taxCredits += row.taxCredits;
+            acc.single += row.single;
+            acc.marriedJoint += row.marriedJoint;
+            acc.head += row.head;
+            acc.other += row.other;
+            acc.wages += row.wages;
+            acc.interest += row.interest;
+            acc.dividends += row.dividends;
+            acc.gainCapital += row.gainCapital;
+            acc.lossCapital += row.lossCapital;
+            acc.gainBusiness += row.gainBusiness;
+            acc.lossBusiness += row.lossBusiness;
+            acc.gainRent += row.gainRent;
+            acc.lossRent += row.lossRent;
+            acc.stdDeduction += row.stdDeduction;
+            acc.itemizedDeduction += row.itemizedDeduction;
+            return acc;
+          },
+          {
+            returns: 0,
+            stateNYAGI: 0,
+            taxableIncome: 0,
+            taxLiability: 0,
+            taxBeforeCredits: 0,
+            taxCredits: 0,
+            single: 0,
+            marriedJoint: 0,
+            head: 0,
+            other: 0,
+            wages: 0,
+            interest: 0,
+            dividends: 0,
+            gainCapital: 0,
+            lossCapital: 0,
+            gainBusiness: 0,
+            lossBusiness: 0,
+            gainRent: 0,
+            lossRent: 0,
+            stdDeduction: 0,
+            itemizedDeduction: 0,
+          }
+        );
+      }
+
+      /* KPI RENDER */
+      function renderKPIs() {
+        const rows = applyFilters();
+        const totals = aggregateRows(rows);
+        const avgTax = totals.returns ? totals.taxLiability / totals.returns : 0;
+        const creditsPct = totals.taxBeforeCredits
+          ? (totals.taxCredits / totals.taxBeforeCredits) * 100
+          : 0;
+
+        const kpis = [
+          {
+            title: 'Returns',
+            value: formatters.number(totals.returns),
+            subtitle: 'Total returns filed',
+          },
+          {
+            title: 'NY AGI',
+            value: formatters.currency(totals.stateNYAGI),
+            subtitle: 'New York State Adjusted Gross Income',
+          },
+          {
+            title: 'Taxable Income',
+            value: formatters.currency(totals.taxableIncome),
+            subtitle: 'Income subject to tax',
+          },
+          {
+            title: 'Tax Liability',
+            value: formatters.currency(totals.taxLiability),
+            subtitle: 'Net tax owed after credits',
+          },
+          {
+            title: 'Avg Tax / Return',
+            value: formatters.currencyWithCents(avgTax),
+            subtitle: 'Average tax liability per return',
+          },
+          {
+            title: 'Credits as % of Pre-credit Tax',
+            value: formatters.percentage(creditsPct),
+            subtitle: 'Share of credits vs. pre-credit liability',
+          },
+        ];
+
+        const container = document.getElementById('kpiTiles');
+        container.innerHTML = '';
+        kpis.forEach((kpi) => {
+          const card = document.createElement('div');
+          card.className =
+            'bg-white border border-slate-200 rounded-2xl shadow-sm p-4 sm:p-6 flex flex-col gap-2';
+          card.innerHTML = `
+            <span class="text-sm font-medium text-slate-500 uppercase tracking-wide">${kpi.title}</span>
+            <span class="text-2xl font-semibold text-slate-900">${kpi.value}</span>
+            <span class="text-sm text-slate-500">${kpi.subtitle}</span>
+          `;
+          container.appendChild(card);
+        });
+      }
+
+      /* CHART RENDER HELPERS */
+      const charts = {};
+
+      function ensureChart(id) {
+        if (!charts[id]) {
+          const element = document.getElementById(id);
+          if (!element) return null;
+          charts[id] = echarts.init(element);
+        }
+        return charts[id];
+      }
+
+      function renderTrendChart() {
+        const chart = ensureChart('trendChart');
+        if (!chart) return;
+
+        const { county, residency } = state.filters;
+        const filtered = state.rawData.filter((row) => {
+          const matchCounty = county === 'All Counties' || row.county === county;
+          const matchResidency =
+            residency === 'All Residency' || row.residency === residency;
+          return matchCounty && matchResidency;
+        });
+
+        const grouped = filtered.reduce((acc, row) => {
+          if (!acc[row.year]) {
+            acc[row.year] = { stateNYAGI: 0, taxLiability: 0 };
+          }
+          acc[row.year].stateNYAGI += row.stateNYAGI;
+          acc[row.year].taxLiability += row.taxLiability;
+          return acc;
+        }, {});
+
+        const years = Object.keys(grouped)
+          .map(Number)
+          .sort((a, b) => a - b);
+
+        const agiSeries = years.map((year) => grouped[year].stateNYAGI);
+        const taxSeries = years.map((year) => grouped[year].taxLiability);
+
+        chart.setOption({
+          color: ['#4338CA', '#F97316'],
+          tooltip: {
+            trigger: 'axis',
+            formatter: (params) => {
+              const lines = params.map((item) => {
+                const formattedValue = formatters.currency(Number(item.value));
+                return `${item.marker} ${item.seriesName}: ${formattedValue}`;
+              });
+              return `${params[0].name}<br/>${lines.join('<br/>')}`;
+            },
+          },
+          legend: {
+            top: 0,
+            textStyle: { color: '#0f172a' },
+          },
+          grid: { left: '5%', right: '3%', top: 40, bottom: 40 },
+          xAxis: {
+            type: 'category',
+            data: years,
+            boundaryGap: false,
+            axisLine: { lineStyle: { color: '#94a3b8' } },
+            axisLabel: { color: '#475569' },
+          },
+          yAxis: {
+            type: 'value',
+            axisLine: { lineStyle: { color: '#94a3b8' } },
+            axisLabel: {
+              color: '#475569',
+              formatter: (value) => `$${(value / 1_000_000).toFixed(1)}M`,
+            },
+            splitLine: { lineStyle: { color: '#e2e8f0' } },
+          },
+          series: [
+            {
+              name: 'NY AGI',
+              type: 'line',
+              smooth: true,
+              areaStyle: {
+                opacity: 0.1,
+              },
+              data: agiSeries,
+            },
+            {
+              name: 'Tax Liability',
+              type: 'line',
+              smooth: true,
+              areaStyle: {
+                opacity: 0.08,
+              },
+              data: taxSeries,
+            },
+          ],
+        });
+      }
+
+      function renderFilingStatusChart() {
+        const chart = ensureChart('filingStatusChart');
+        if (!chart) return;
+        const totals = aggregateRows(applyFilters());
+        const other = totals.other;
+        const data = [
+          { value: totals.single, name: 'Single' },
+          { value: totals.marriedJoint, name: 'Married Joint' },
+          { value: totals.head, name: 'Head of Household' },
+          { value: other, name: 'Other' },
+        ];
+
+        chart.setOption({
+          color: ['#6366F1', '#22C55E', '#F59E0B', '#EF4444'],
+          tooltip: {
+            trigger: 'item',
+            formatter: (params) => {
+              const total = data.reduce((sum, item) => sum + item.value, 0);
+              const percent = total ? ((params.value / total) * 100).toFixed(1) : 0;
+              return `${params.marker} ${params.name}: ${formatters.number(
+                params.value
+              )} (${percent}%)`;
+            },
+          },
+          legend: {
+            bottom: 0,
+            textStyle: { color: '#0f172a' },
+          },
+          series: [
+            {
+              name: 'Filing Status',
+              type: 'pie',
+              radius: ['45%', '70%'],
+              avoidLabelOverlap: false,
+              itemStyle: {
+                borderRadius: 10,
+                borderColor: '#fff',
+                borderWidth: 2,
+              },
+              label: {
+                formatter: '{b}: {d}%',
+                color: '#0f172a',
+              },
+              data,
+            },
+          ],
+        });
+      }
+
+      function renderIncomeSourcesChart() {
+        const chart = ensureChart('incomeSourcesChart');
+        if (!chart) return;
+        const totals = aggregateRows(applyFilters());
+
+        const netCapital = totals.gainCapital - totals.lossCapital;
+        const netBusiness = totals.gainBusiness - totals.lossBusiness;
+        const netRent = totals.gainRent - totals.lossRent;
+
+        chart.setOption({
+          color: ['#6366F1', '#0EA5E9', '#22C55E', '#F97316', '#EF4444'],
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: (params) => {
+              return params
+                .map(
+                  (item) =>
+                    `${item.marker} ${item.seriesName}: ${formatters.currency(Number(item.value))}`
+                )
+                .join('<br/>');
+            },
+          },
+          grid: { left: '5%', right: '5%', top: 40, bottom: 40 },
+          xAxis: {
+            type: 'value',
+            axisLine: { lineStyle: { color: '#94a3b8' } },
+            axisLabel: {
+              color: '#475569',
+              formatter: (value) => `$${(value / 1_000_000).toFixed(1)}M`,
+            },
+            splitLine: { lineStyle: { color: '#e2e8f0' } },
+          },
+          yAxis: {
+            type: 'category',
+            data: ['Income Sources'],
+            axisLine: { show: false },
+            axisTick: { show: false },
+            axisLabel: { color: '#475569' },
+          },
+          series: [
+            {
+              name: 'Wages',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [totals.wages],
+            },
+            {
+              name: 'Interest',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [totals.interest],
+            },
+            {
+              name: 'Dividends',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [totals.dividends],
+            },
+            {
+              name: 'Capital (net)',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [netCapital],
+            },
+            {
+              name: 'Business/Farm (net)',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [netBusiness],
+            },
+            {
+              name: 'Rent/Royalties (net)',
+              type: 'bar',
+              stack: 'total',
+              emphasis: { focus: 'series' },
+              data: [netRent],
+            },
+          ],
+        });
+      }
+
+      function renderDeductionsChart() {
+        const chart = ensureChart('deductionsChart');
+        if (!chart) return;
+        const totals = aggregateRows(applyFilters());
+        const data = [
+          { name: 'Standard Deduction', value: totals.stdDeduction },
+          { name: 'Itemized Deduction', value: totals.itemizedDeduction },
+          { name: 'Tax Credits', value: totals.taxCredits },
+          { name: 'Tax Liability', value: totals.taxLiability },
+        ];
+
+        chart.setOption({
+          color: ['#6366F1', '#0EA5E9', '#22C55E', '#F97316'],
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: (params) => {
+              return params
+                .map(
+                  (item) =>
+                    `${item.marker} ${item.seriesName}: ${formatters.currency(Number(item.value))}`
+                )
+                .join('<br/>');
+            },
+          },
+          grid: { left: '10%', right: '5%', top: 30, bottom: 40 },
+          xAxis: {
+            type: 'category',
+            data: data.map((item) => item.name),
+            axisLabel: { color: '#475569' },
+            axisLine: { lineStyle: { color: '#94a3b8' } },
+          },
+          yAxis: {
+            type: 'value',
+            axisLabel: {
+              color: '#475569',
+              formatter: (value) => `$${(value / 1_000_000).toFixed(1)}M`,
+            },
+            splitLine: { lineStyle: { color: '#e2e8f0' } },
+          },
+          series: [
+            {
+              name: 'Amount',
+              type: 'bar',
+              barWidth: '45%',
+              data: data.map((item) => item.value),
+            },
+          ],
+        });
+      }
+
+      function renderTopCountiesChart() {
+        const chart = ensureChart('topCountiesChart');
+        if (!chart) return;
+        const { residency, income, year } = state.filters;
+        const filtered = state.rawData.filter((row) => {
+          const matchYear = row.year === year;
+          const matchResidency =
+            residency === 'All Residency' || row.residency === residency;
+          const matchIncome = income === 'All Income Ranges' || row.incomeRange === income;
+          return matchYear && matchResidency && matchIncome;
+        });
+
+        const grouped = filtered.reduce((acc, row) => {
+          if (!acc[row.county]) {
+            acc[row.county] = 0;
+          }
+          acc[row.county] += row.stateNYAGI;
+          return acc;
+        }, {});
+
+        const entries = Object.entries(grouped)
+          .map(([countyName, value]) => ({ countyName, value }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 12);
+
+        chart.setOption({
+          color: ['#6366F1'],
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: (params) => {
+              const item = params[0];
+              return `${item.name}: ${formatters.currency(Number(item.value))}`;
+            },
+          },
+          grid: { left: '30%', right: '5%', top: 20, bottom: 20 },
+          xAxis: {
+            type: 'value',
+            axisLabel: {
+              color: '#475569',
+              formatter: (value) => `$${(value / 1_000_000).toFixed(1)}M`,
+            },
+            splitLine: { lineStyle: { color: '#e2e8f0' } },
+          },
+          yAxis: {
+            type: 'category',
+            data: entries.map((item) => item.countyName),
+            axisLabel: { color: '#475569' },
+            axisLine: { show: false },
+            axisTick: { show: false },
+          },
+          series: [
+            {
+              name: 'NY AGI',
+              type: 'bar',
+              data: entries.map((item) => item.value),
+              barWidth: '55%',
+            },
+          ],
+        });
+      }
+
+      function updateAll() {
+        renderKPIs();
+        renderTrendChart();
+        renderFilingStatusChart();
+        renderIncomeSourcesChart();
+        renderDeductionsChart();
+        renderTopCountiesChart();
+      }
+
+      window.addEventListener('resize', () => {
+        Object.values(charts).forEach((chart) => chart && chart.resize());
+      });
+
+      document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+  </body>
+</html>
